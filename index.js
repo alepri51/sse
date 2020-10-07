@@ -1,7 +1,7 @@
 const { Readable } = require('stream');
 
-const sse = (req, res, stream) => {
-    req.socket.setTimeout(Number.MAX_VALUE);
+const sseSubscribe = (req, res, stream) => {
+    req.socket.setTimeout(0);
 
     res.set({
         'Content-Type': 'text/event-stream',
@@ -17,19 +17,18 @@ const sse = (req, res, stream) => {
     stream.push(`retry: 3000\n\n`);
 };
 
-const publish = (stream, event, data) => {
+const ssePublish = (stream, event, data) => {
     event && stream.push(`event: ${event}\n`);
     stream.push(`data: ${data || ''}\n\n`);
 };
 
 
-class SSE extends Readable {
+class SSE {
     constructor({ pub, sub } = {}) {
-        super();
-
         this.error = void 0;
         this.ready = false;
-        this.channel = void 0;
+
+        this.clients = {};
 
         if(pub && sub) {
             this.sub = sub;
@@ -37,8 +36,10 @@ class SSE extends Readable {
 
             this.sub.on('message', (channel, message) => {
                 let { event, data } = JSON.parse(message);
-
-                publish(this, event, data);
+                    
+                const publish = this.clients[channel]
+                
+                publish && publish(event, data);
             });
         }
         else {
@@ -47,8 +48,10 @@ class SSE extends Readable {
             this.pub = {
                 publish(channel, message) {
                     let { event, data } = JSON.parse(message);
-
-                    publish(self, event, data);
+                    
+                    const publish = self.clients[channel];
+                    
+                    publish && publish(event, data);
                 }
             };
 
@@ -60,22 +63,36 @@ class SSE extends Readable {
         }
     }
 
-    _read() {
+    /* _read() {
 
-    }
+    } */
 
     subscribe(req, res, channel) {
-        this.channel = channel;
+        const stream = new Readable();
+        stream._read = () => {};
+        
+        const subscribe = (req, res, stream) => {
+            sseSubscribe(req, res, stream);
+
+            return (event, data) => {
+                ssePublish(stream, event, data);
+            }
+        }
+
+        this.clients[channel] = subscribe(req, res, stream); //publish to client
+
         this.sub.subscribe(channel);
 
-        sse(req, res, this);
+        //setInterval(() => this.clients[channel](void 0, void 0), 10000);
 
-        setInterval(() => this.publish(void 0, void 0), 10000);
+        return (event, data) => {
+            this.pub.publish(channel, JSON.stringify({ event, data }));
+        };
     }
 
-    publish(event, data) {
+    /* publish(event, data) {
         this.channel && this.pub.publish(this.channel, JSON.stringify({ event, data }));
-    }
+    } */
 }
 
 module.exports = (pub, sub) => new SSE(pub, sub);
