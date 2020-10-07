@@ -83,7 +83,7 @@ class SSE {
 
         this.sub.subscribe(channel);
 
-        //setInterval(() => this.clients[channel](void 0, void 0), 10000);
+        setInterval(() => this.clients[channel](void 0, channel), 10000);
 
         return (event, data) => {
             this.pub.publish(channel, JSON.stringify({ event, data }));
