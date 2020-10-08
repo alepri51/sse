@@ -1,11 +1,11 @@
 const sseSubscribe = (req, res, onClose) => {
-    req.socket.setTimeout(0);
-
-    req.connection.on('close', () => {
-        onClose && onClose();
+    //req.socket.setTimeout(0);
+    //res.connection.setTimeout(0);
+    req.on('close', () => {
+        onClose && onClose(req);
     });
 
-    res.set({
+    res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
@@ -13,8 +13,9 @@ const sseSubscribe = (req, res, onClose) => {
         'Content-Encoding': 'no'
     });
 
-    //res.write('\n');
+    res.write('\n');
     res.write(`retry: 3000\n\n`);
+
 };
 
 const ssePublish = (res, event, data) => {
@@ -35,7 +36,11 @@ class SSE {
                     
             const publish = clients[channel];
             
-            publish && publish(event, data);
+            data = typeof(data) === 'object' ? JSON.stringify(data) : data;
+
+            publish && publish.internal.forEach(internal => {
+                internal(event, data)
+            }); //publish.internal(event, data);
         }
 
         if(pub && sub) {
@@ -69,17 +74,25 @@ class SSE {
 
     subscribe(req, res, channel) {
         const subscribe = (req, res) => {
-            const interval = setInterval(() => this.clients[channel](void 0, channel), 10000);
+            const interval = setInterval(() => this.clients[channel] && this.clients[channel](void 0, channel), 10000);
 
-            sseSubscribe(req, res, () => {
+            sseSubscribe(req, res, (req) => {
                 //onClose
-                clearInterval(interval);
+                if(this.clients[channel]) {
+                    let external = this.clients[channel];
+                    external.internal.delete(req);
 
-                this.sub.unsubscribe(channel);
+                    if(!external.internal.size) {
+                        this.clients[channel] = void 0;
 
-                this.clients[channel] = void 0;
+                        clearInterval(interval);
 
-                res.end();
+                        this.sub.unsubscribe(channel);
+
+                        res.end();
+                    }
+                    
+                }
             });
 
             return (event, data) => {
@@ -87,15 +100,24 @@ class SSE {
             }
         }
 
-        this.clients[channel] = subscribe(req, res); //publish to client
+        let external = this.clients[channel];
+
+        if(!external) {
+            external = (event, data) => {
+                this.pub.publish(channel, JSON.stringify({ event, data }));
+            };
+        }
+        
+        external.internal = external.internal || new Map();
+        external.internal.set(req, subscribe(req, res));
+        /* external.internal = external.internal || [];
+        external.internal = [...external.internal, subscribe(req, res)]; */
+
+        this.clients[channel] = external; //publish to client
 
         this.sub.subscribe(channel);
 
-        
-
-        return (event, data) => {
-            this.pub.publish(channel, JSON.stringify({ event, data }));
-        };
+        return external;
     }
 }
 
