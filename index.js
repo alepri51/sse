@@ -14,7 +14,7 @@ const sseSubscribe = (req, res, onClose) => {
     });
 
     res.write('\n');
-    res.write(`retry: 3000\n\n`);
+    //res.write(`retry: 3000\n\n`);
 
 };
 
