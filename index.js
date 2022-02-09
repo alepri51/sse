@@ -14,7 +14,7 @@ const sseSubscribe = (req, res, onClose) => {
     });
 
     res.write('\n');
-    //res.write(`retry: 3000\n\n`);
+    res.write(`retry: 3000\n\n`);
 
 };
 
@@ -74,7 +74,7 @@ class SSE {
 
     subscribe(req, res, channel) {
         const subscribe = (req, res) => {
-            const interval = setInterval(() => this.clients[channel] && this.clients[channel](void 0, channel), 10000);
+            //const interval = setInterval(() => this.clients[channel] && this.clients[channel](void 0, channel), 10000);
 
             sseSubscribe(req, res, (req) => {
                 //onClose
@@ -85,7 +85,7 @@ class SSE {
                     if(!external.internal.size) {
                         this.clients[channel] = void 0;
 
-                        clearInterval(interval);
+                        //clearInterval(interval);
 
                         this.sub.unsubscribe(channel);
 
